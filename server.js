@@ -13,6 +13,9 @@ app.use(express.json());
 app.use(logReq);
 
 //routes
+app.get("/", (req, res) => {
+  res.json({ message: "Backend is working!" });
+});
 
 //global handling errors
 app.use(globalErr);
