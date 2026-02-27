@@ -6,11 +6,22 @@ import productRoutes from "./routes/productRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import cartRoutes from "./routes/cartRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
+import cors from "cors";
 
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 connectDB();
+
+// CORS configuration - allow frontend to access
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
 
 //express setup
 app.use(express.json());
