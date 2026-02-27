@@ -39,7 +39,6 @@ const cartSchema = new mongoose.Schema(
   },
 );
 
-// Fixed pre-save hook for Mongoose v9
 cartSchema.pre("save", function () {
   this.totalPrice = this.items.reduce((total, item) => {
     return total + item.price * item.quantity;
