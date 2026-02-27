@@ -39,12 +39,11 @@ const cartSchema = new mongoose.Schema(
   },
 );
 
-// Calculate total price before saving
-cartSchema.pre("save", function (next) {
+// Fixed pre-save hook for Mongoose v9
+cartSchema.pre("save", function () {
   this.totalPrice = this.items.reduce((total, item) => {
     return total + item.price * item.quantity;
   }, 0);
-  next();
 });
 
 const Cart = mongoose.model("Cart", cartSchema);

@@ -22,7 +22,7 @@
   "homepage": "https://github.com/junyaokh822/CyberMart_Backend#readme",
   "dependencies": {
     "axios": "^1.13.5",
-    "bcryptjs": "^3.0.3",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",

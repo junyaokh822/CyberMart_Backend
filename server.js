@@ -4,10 +4,11 @@ import dotenv from "dotenv";
 import connectDB from "./db/conn.js";
 import productRoutes from "./routes/productRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import cartRoutes from "./routes/cartRoutes.js";
 
 dotenv.config();
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 connectDB();
 
 //express setup
@@ -17,6 +18,7 @@ app.use(logReq);
 //routes
 app.use("/api/products", productRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/cart", cartRoutes);
 
 //global handling errors
 app.use(globalErr);
