@@ -3,6 +3,7 @@ import { logReq, globalErr } from "./middleware/basicMiddlewares.js";
 import dotenv from "dotenv";
 import connectDB from "./db/conn.js";
 import productRoutes from "./routes/productRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
 
 dotenv.config();
 const app = express();
@@ -15,6 +16,7 @@ app.use(logReq);
 
 //routes
 app.use("/api/products", productRoutes);
+app.use("/api/auth", authRoutes);
 
 //global handling errors
 app.use(globalErr);

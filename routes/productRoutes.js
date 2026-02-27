@@ -1,10 +1,11 @@
 import express from "express";
 import Product from "../models/Product.js";
 import axios from "axios";
+import { protect, admin } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// Get all products
+// Get all products - PUBLIC
 router.get("/", async (req, res, next) => {
   try {
     const products = await Product.find();
@@ -14,7 +15,7 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-// Get single product by ID
+// Get single product by ID - PUBLIC
 router.get("/:id", async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -27,8 +28,41 @@ router.get("/:id", async (req, res, next) => {
   }
 });
 
-// Create new product
-router.post("/", async (req, res, next) => {
+// Seed products from Fake Store API
+router.post("/seed", async (req, res, next) => {
+  try {
+    const existingProducts = await Product.countDocuments();
+    if (existingProducts > 0) {
+      return res.json({
+        message: "Products already exist in database",
+        count: existingProducts,
+      });
+    }
+
+    const response = await axios.get("https://fakestoreapi.com/products");
+    const products = response.data;
+
+    const formattedProducts = products.map((product) => ({
+      name: product.title,
+      description: product.description,
+      price: product.price,
+      category: product.category,
+      imageUrl: product.image,
+      inStock: true,
+    }));
+
+    const inserted = await Product.insertMany(formattedProducts);
+    res.json({
+      message: "Products seeded successfully!",
+      count: inserted.length,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Create new product - ADMIN ONLY
+router.post("/", protect, admin, async (req, res, next) => {
   try {
     const product = new Product(req.body);
     await product.save();
@@ -38,8 +72,8 @@ router.post("/", async (req, res, next) => {
   }
 });
 
-// Update product
-router.put("/:id", async (req, res, next) => {
+// Update product - ADMIN ONLY
+router.put("/:id", protect, admin, async (req, res, next) => {
   try {
     const product = await Product.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
@@ -54,52 +88,14 @@ router.put("/:id", async (req, res, next) => {
   }
 });
 
-// Delete product
-router.delete("/:id", async (req, res, next) => {
+// Delete product - ADMIN ONLY
+router.delete("/:id", protect, admin, async (req, res, next) => {
   try {
     const product = await Product.findByIdAndDelete(req.params.id);
     if (!product) {
       return res.status(404).json({ error: "Product not found" });
     }
     res.json({ message: "Product deleted successfully" });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Seed products from Fake Store API
-router.post("/seed", async (req, res, next) => {
-  try {
-    // Check if products already exist
-    const existingProducts = await Product.countDocuments();
-    if (existingProducts > 0) {
-      return res.json({
-        message: "Products already exist in database",
-        count: existingProducts,
-      });
-    }
-
-    // Fetch from Fake Store API
-    const response = await axios.get("https://fakestoreapi.com/products");
-    const products = response.data;
-
-    // Transform to match schema
-    const formattedProducts = products.map((product) => ({
-      name: product.title,
-      description: product.description,
-      price: product.price,
-      category: product.category,
-      imageUrl: product.image,
-      inStock: true,
-    }));
-
-    // Insert into database
-    const inserted = await Product.insertMany(formattedProducts);
-
-    res.json({
-      message: "Products seeded successfully!",
-      count: inserted.length,
-    });
   } catch (error) {
     next(error);
   }
