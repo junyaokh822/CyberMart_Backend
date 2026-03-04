@@ -96,4 +96,83 @@ router.get("/profile", protect, async (req, res) => {
   }
 });
 
+// @route   PUT /api/auth/profile
+// @desc    Update user profile
+// @access  Private
+router.put("/profile", protect, async (req, res) => {
+  try {
+    const { firstName, lastName, email } = req.body;
+
+    // Check if email is already taken by another user
+    if (email) {
+      const existingUser = await User.findOne({
+        email,
+        _id: { $ne: req.user._id },
+      });
+      if (existingUser) {
+        return res.status(400).json({ error: "Email already in use" });
+      }
+    }
+
+    // Update user
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      { firstName, lastName, email },
+      { new: true, runValidators: true },
+    ).select("-password");
+
+    res.json(updatedUser);
+  } catch (error) {
+    console.error("Update profile error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// @route   PUT /api/auth/password
+// @desc    Change user password
+// @access  Private
+router.put("/password", protect, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    // Validate input
+    if (!currentPassword || !newPassword) {
+      return res
+        .status(400)
+        .json({ error: "Current password and new password are required" });
+    }
+
+    if (newPassword.length < 6) {
+      return res
+        .status(400)
+        .json({ error: "New password must be at least 6 characters" });
+    }
+
+    // Get user with password
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Check current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Current password is incorrect" });
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // Update password
+    user.password = hashedPassword;
+    await user.save();
+
+    res.json({ message: "Password updated successfully" });
+  } catch (error) {
+    console.error("Change password error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
