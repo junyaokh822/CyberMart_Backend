@@ -43,7 +43,7 @@ router.get("/check/:productId", protect, async (req, res) => {
     }
 
     const inWishlist = wishlist.items.some(
-      (item) => item.productId.toString() === productId,
+      (item) => item.productId?.toString() === productId,
     );
 
     res.json({ inWishlist });
@@ -78,7 +78,7 @@ router.post("/", protect, async (req, res) => {
 
     // Check if product already in wishlist
     const existingItem = wishlist.items.find(
-      (item) => item.productId.toString() === productId,
+      (item) => item.productId?.toString() === productId,
     );
 
     if (existingItem) {
@@ -106,7 +106,7 @@ router.post("/", protect, async (req, res) => {
 });
 
 // @route   DELETE /api/wishlist/:productId
-// @desc    Remove item from wishlist
+// @desc    Remove item from wishlist by productId or subdocument _id
 // @access  Private
 router.delete("/:productId", protect, async (req, res) => {
   try {
@@ -118,10 +118,17 @@ router.delete("/:productId", protect, async (req, res) => {
       return res.status(404).json({ error: "Wishlist not found" });
     }
 
-    // Filter out the item
+    const before = wishlist.items.length;
+
     wishlist.items = wishlist.items.filter(
-      (item) => item.productId.toString() !== productId,
+      (item) =>
+        item.productId?.toString() !== productId &&
+        item._id?.toString() !== productId,
     );
+
+    if (wishlist.items.length === before) {
+      return res.status(404).json({ error: "Item not found in wishlist" });
+    }
 
     await wishlist.save();
 
