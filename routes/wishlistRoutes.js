@@ -10,7 +10,8 @@ const router = express.Router();
 // @access  Private
 router.get("/", protect, async (req, res) => {
   try {
-    // Populate product details so the wishlist page has fresh data
+    // Note: cannot use .lean() here because it may call .create() if wishlist is missing,
+    // and populate() works fine on Mongoose documents
     let wishlist = await Wishlist.findOne({ userId: req.user._id }).populate(
       "items.productId",
       "name price imageUrl inStock category",
@@ -18,10 +19,7 @@ router.get("/", protect, async (req, res) => {
 
     // Auto-create an empty wishlist if one doesn't exist yet
     if (!wishlist) {
-      wishlist = await Wishlist.create({
-        userId: req.user._id,
-        items: [],
-      });
+      wishlist = await Wishlist.create({ userId: req.user._id, items: [] });
     }
 
     res.json(wishlist);
@@ -38,14 +36,15 @@ router.get("/check/:productId", protect, async (req, res) => {
   try {
     const { productId } = req.params;
 
-    const wishlist = await Wishlist.findOne({ userId: req.user._id });
+    // .lean() safe — read-only existence check, only need items array
+    const wishlist = await Wishlist.findOne({ userId: req.user._id })
+      .select("items.productId")
+      .lean();
 
-    // If no wishlist exists yet, product can't be in it
     if (!wishlist) {
       return res.json({ inWishlist: false });
     }
 
-    // Check if any item matches the given productId
     const inWishlist = wishlist.items.some(
       (item) => item.productId?.toString() === productId,
     );
@@ -64,19 +63,18 @@ router.post("/", protect, async (req, res) => {
   try {
     const { productId } = req.body;
 
-    // Confirm the product exists before saving to wishlist
-    const product = await Product.findById(productId);
+    // .lean() safe — only need product fields, not mutating Product
+    const product = await Product.findById(productId)
+      .select("name price imageUrl category")
+      .lean();
     if (!product) {
       return res.status(404).json({ error: "Product not found" });
     }
 
-    // Get or initialize the user's wishlist
+    // No lean() — need to mutate and save
     let wishlist = await Wishlist.findOne({ userId: req.user._id });
     if (!wishlist) {
-      wishlist = new Wishlist({
-        userId: req.user._id,
-        items: [],
-      });
+      wishlist = new Wishlist({ userId: req.user._id, items: [] });
     }
 
     // Prevent duplicate wishlist entries
@@ -115,6 +113,7 @@ router.delete("/:productId", protect, async (req, res) => {
   try {
     const { productId } = req.params;
 
+    // No lean() — need to mutate and save
     const wishlist = await Wishlist.findOne({ userId: req.user._id });
     if (!wishlist) {
       return res.status(404).json({ error: "Wishlist not found" });
@@ -123,14 +122,12 @@ router.delete("/:productId", protect, async (req, res) => {
     const before = wishlist.items.length;
 
     // Filter out the item matching either the productId or the subdocument _id
-    // This handles both cases: removing by product reference or by wishlist item _id
     wishlist.items = wishlist.items.filter(
       (item) =>
         item.productId?.toString() !== productId &&
         item._id?.toString() !== productId,
     );
 
-    // If length didn't change, the item wasn't found
     if (wishlist.items.length === before) {
       return res.status(404).json({ error: "Item not found in wishlist" });
     }

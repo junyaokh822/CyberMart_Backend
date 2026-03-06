@@ -10,8 +10,8 @@ const router = express.Router();
 // @access  Private
 router.post("/create", protect, async (req, res) => {
   try {
-    // Avoid duplicate carts — return existing one if found
-    const existing = await Cart.findOne({ userId: req.user._id });
+    // .lean() for the existence check — only need to know if it exists
+    const existing = await Cart.findOne({ userId: req.user._id }).lean();
     if (existing) {
       return res.json({ message: "Cart already exists", existing });
     }
@@ -32,7 +32,8 @@ router.post("/create", protect, async (req, res) => {
 // @access  Private
 router.get("/", protect, async (req, res) => {
   try {
-    const cart = await Cart.findOne({ userId: req.user._id });
+    // .lean() for fast read-only response
+    const cart = await Cart.findOne({ userId: req.user._id }).lean();
     if (!cart) {
       return res.status(404).json({ error: "Cart not found" });
     }
@@ -50,8 +51,10 @@ router.post("/items", protect, async (req, res) => {
   try {
     const { productId, quantity = 1 } = req.body;
 
-    // Verify the product exists and is available
-    const product = await Product.findById(productId);
+    // .lean() safe here — only checking stock status, not mutating Product
+    const product = await Product.findById(productId)
+      .select("name price imageUrl inStock")
+      .lean();
     if (!product) {
       return res.status(404).json({ error: "Product not found" });
     }
@@ -59,7 +62,7 @@ router.post("/items", protect, async (req, res) => {
       return res.status(400).json({ error: "Product is out of stock" });
     }
 
-    // Get or create the user's cart
+    // No lean() — need to mutate and save the cart
     let cart = await Cart.findOne({ userId: req.user._id });
     if (!cart) {
       cart = await Cart.create({ userId: req.user._id, items: [] });
@@ -103,6 +106,7 @@ router.put("/items/:itemId", protect, async (req, res) => {
       return res.status(400).json({ error: "Quantity must be at least 1" });
     }
 
+    // No lean() — need to mutate subdocument and save
     const cart = await Cart.findOne({ userId: req.user._id });
     if (!cart) {
       return res.status(404).json({ error: "Cart not found" });
@@ -128,6 +132,7 @@ router.put("/items/:itemId", protect, async (req, res) => {
 // @access  Private
 router.delete("/items/:itemId", protect, async (req, res) => {
   try {
+    // No lean() — need to mutate subdocument and save
     const cart = await Cart.findOne({ userId: req.user._id });
     if (!cart) {
       return res.status(404).json({ error: "Cart not found" });
@@ -153,6 +158,7 @@ router.delete("/items/:itemId", protect, async (req, res) => {
 // @access  Private
 router.delete("/", protect, async (req, res) => {
   try {
+    // No lean() — need to mutate and save
     const cart = await Cart.findOne({ userId: req.user._id });
     if (!cart) {
       return res.status(404).json({ error: "Cart not found" });

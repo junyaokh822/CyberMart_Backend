@@ -10,19 +10,24 @@ const router = express.Router();
 // @access  Public
 router.get("/", async (req, res, next) => {
   try {
-    const products = await Product.find();
+    // .select() omits description (only needed on detail page) to reduce payload
+    // .lean() returns plain JS objects instead of Mongoose documents — faster for read-only responses
+    const products = await Product.find()
+      .select("name price imageUrl category inStock")
+      .lean();
     res.json(products);
   } catch (error) {
-    next(error); // passes to globalErr middleware
+    next(error);
   }
 });
 
 // @route   GET /api/products/:id
-// @desc    Get a single product by ID
+// @desc    Get a single product by ID (full document including description)
 // @access  Public
 router.get("/:id", async (req, res, next) => {
   try {
-    const product = await Product.findById(req.params.id);
+    // Full document needed here for the product detail page
+    const product = await Product.findById(req.params.id).lean();
     if (!product) {
       return res.status(404).json({ error: "Product not found" });
     }
@@ -34,7 +39,7 @@ router.get("/:id", async (req, res, next) => {
 
 // @route   POST /api/products/seed
 // @desc    Seed the database with products from Fake Store API (runs once)
-// @access  Public (can be secured with admin middleware if needed)
+// @access  Public
 router.post("/seed", async (req, res, next) => {
   try {
     // Only seed if the collection is empty — prevents duplicate data

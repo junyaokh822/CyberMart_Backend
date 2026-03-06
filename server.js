@@ -9,6 +9,7 @@ import orderRoutes from "./routes/orderRoutes.js";
 import wishlistRoutes from "./routes/wishlistRoutes.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
 import cors from "cors";
+import compression from "compression";
 
 // Load environment variables from .env file
 dotenv.config();
@@ -18,6 +19,13 @@ const PORT = process.env.PORT || 3000;
 
 // Connect to MongoDB
 connectDB();
+
+/**
+ * compression middleware
+ * Gzip-compresses all HTTP responses, reducing payload size by 60-70%.
+ * Must be registered before routes so all responses are compressed.
+ */
+app.use(compression());
 
 /**
  * CORS Configuration

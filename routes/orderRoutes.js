@@ -14,7 +14,7 @@ router.post("/", protect, async (req, res) => {
     const { paymentMethod, shippingAddress } = req.body;
 
     // Fetch user's cart and ensure it has items
-    const cart = await Cart.findOne({ userId: req.user._id });
+    const cart = await Cart.findOne({ userId: req.user._id }).lean();
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({ error: "Cart is empty" });
     }
@@ -23,18 +23,19 @@ router.post("/", protect, async (req, res) => {
     // and lock in the current price at time of order
     const orderItems = [];
     for (const item of cart.items) {
-      const product = await Product.findById(item.productId);
+      const product = await Product.findById(item.productId)
+        .select("name price imageUrl inStock")
+        .lean();
 
       if (!product) {
-        return res.status(404).json({
-          error: `Product ${item.name} not found`,
-        });
+        return res
+          .status(404)
+          .json({ error: `Product ${item.name} not found` });
       }
-
       if (!product.inStock) {
-        return res.status(400).json({
-          error: `Product ${product.name} is out of stock`,
-        });
+        return res
+          .status(400)
+          .json({ error: `Product ${product.name} is out of stock` });
       }
 
       orderItems.push({
@@ -63,9 +64,11 @@ router.post("/", protect, async (req, res) => {
     });
 
     // Clear the cart after a successful order placement
-    cart.items = [];
-    cart.totalPrice = 0;
-    await cart.save();
+    // Note: cannot use lean() here since it needs to mutate and save
+    const cartDoc = await Cart.findOne({ userId: req.user._id });
+    cartDoc.items = [];
+    cartDoc.totalPrice = 0;
+    await cartDoc.save();
 
     res.status(201).json(order);
   } catch (error) {
@@ -79,9 +82,10 @@ router.post("/", protect, async (req, res) => {
 // @access  Private
 router.get("/", protect, async (req, res) => {
   try {
-    const orders = await Order.find({ userId: req.user._id }).sort({
-      createdAt: -1,
-    });
+    // .lean() for fast read-only response
+    const orders = await Order.find({ userId: req.user._id })
+      .sort({ createdAt: -1 })
+      .lean();
     res.json(orders);
   } catch (error) {
     console.error("Get orders error:", error.message);
@@ -98,7 +102,7 @@ router.get("/:id", protect, async (req, res) => {
     const order = await Order.findOne({
       _id: req.params.id,
       userId: req.user._id,
-    });
+    }).lean();
 
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
@@ -116,6 +120,7 @@ router.get("/:id", protect, async (req, res) => {
 // @access  Private
 router.put("/:id/cancel", protect, async (req, res) => {
   try {
+    // No lean() here — need to mutate and save the document
     const order = await Order.findOne({
       _id: req.params.id,
       userId: req.user._id,
@@ -148,8 +153,9 @@ router.put("/:id/cancel", protect, async (req, res) => {
 router.get("/admin/all", protect, admin, async (req, res) => {
   try {
     const orders = await Order.find()
-      .populate("userId", "firstName lastName email") // join user info for display
-      .sort({ createdAt: -1 });
+      .populate("userId", "firstName lastName email")
+      .sort({ createdAt: -1 })
+      .lean();
 
     res.json(orders);
   } catch (error) {
@@ -176,6 +182,7 @@ router.put("/admin/:id/status", protect, admin, async (req, res) => {
       return res.status(400).json({ error: "Invalid status" });
     }
 
+    // No lean() — need to mutate and save
     const order = await Order.findById(req.params.id);
     if (!order) {
       return res.status(404).json({ error: "Order not found" });

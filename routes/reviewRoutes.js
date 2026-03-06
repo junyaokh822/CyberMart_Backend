@@ -13,20 +13,17 @@ router.get("/product/:productId", async (req, res) => {
   try {
     const { productId } = req.params;
 
-    // Fetch latest 50 reviews, newest first
+    // .lean() for fast read-only response — no Mongoose document overhead
     const reviews = await Review.find({ productId })
       .sort({ createdAt: -1 })
-      .limit(50);
+      .limit(50)
+      .lean();
 
     // Calculate average rating on the server to keep frontend simple
     const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
     const averageRating = reviews.length > 0 ? totalRating / reviews.length : 0;
 
-    res.json({
-      reviews,
-      averageRating,
-      totalReviews: reviews.length,
-    });
+    res.json({ reviews, averageRating, totalReviews: reviews.length });
   } catch (error) {
     console.error("Get reviews error:", error.message);
     res.status(500).json({ error: error.message });
@@ -41,17 +38,18 @@ router.get("/check-purchase/:productId", protect, async (req, res) => {
     const { productId } = req.params;
 
     // User must have a delivered or shipped order containing this product
+    // .lean() is safe here — it only needs to check existence, not mutate
     const hasPurchased = await Order.findOne({
       userId: req.user._id,
       "items.productId": productId,
       status: { $in: ["delivered", "shipped"] },
-    });
+    }).lean();
 
     // User can only review once per product
     const existingReview = await Review.findOne({
       productId,
       userId: req.user._id,
-    });
+    }).lean();
 
     res.json({
       canReview: !!hasPurchased && !existingReview,
@@ -71,8 +69,8 @@ router.post("/", protect, async (req, res) => {
   try {
     const { productId, rating, comment } = req.body;
 
-    // Confirm the product exists
-    const product = await Product.findById(productId);
+    // Confirm the product exists — lean() since it only needs to check existence
+    const product = await Product.findById(productId).select("_id").lean();
     if (!product) {
       return res.status(404).json({ error: "Product not found" });
     }
@@ -82,7 +80,7 @@ router.post("/", protect, async (req, res) => {
       userId: req.user._id,
       "items.productId": productId,
       status: { $in: ["delivered", "shipped"] },
-    });
+    }).lean();
 
     if (!hasPurchased) {
       return res.status(403).json({
@@ -94,12 +92,12 @@ router.post("/", protect, async (req, res) => {
     const existingReview = await Review.findOne({
       productId,
       userId: req.user._id,
-    });
+    }).lean();
 
     if (existingReview) {
-      return res.status(400).json({
-        error: "You have already reviewed this product",
-      });
+      return res
+        .status(400)
+        .json({ error: "You have already reviewed this product" });
     }
 
     // Store user's full name directly so it shows correctly even if they rename later
@@ -126,6 +124,7 @@ router.put("/:reviewId", protect, async (req, res) => {
     const { reviewId } = req.params;
     const { rating, comment } = req.body;
 
+    // No lean() — need to mutate and save
     const review = await Review.findById(reviewId);
     if (!review) {
       return res.status(404).json({ error: "Review not found" });
@@ -155,6 +154,7 @@ router.delete("/:reviewId", protect, async (req, res) => {
   try {
     const { reviewId } = req.params;
 
+    // No lean() — need to call deleteOne() on the document
     const review = await Review.findById(reviewId);
     if (!review) {
       return res.status(404).json({ error: "Review not found" });
