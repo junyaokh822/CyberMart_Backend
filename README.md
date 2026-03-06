@@ -110,11 +110,29 @@ Server runs on [http://localhost:3000](http://localhost:3000).
 
 ```
 CyberMart_Backend/
+├── models/               # Mongoose schemas & indexes
 ├── routes/               # Express route handlers
 ├── middleware/           # Auth & error middleware
 ├── db/                   # MongoDB connection
 └── server.js             # Entry point
 ```
+
+---
+
+## Database Indexes
+
+Indexes are defined directly in each Mongoose schema to optimize common queries.
+
+| Model     | Index                               | Purpose                              |
+| --------- | ----------------------------------- | ------------------------------------ |
+| `User`    | `role`                              | Filter users by role (admin queries) |
+| `Product` | `category`, `price`, `inStock`      | Product listing and filtering        |
+| `Order`   | `userId`, `status`                  | Order history and status filtering   |
+| `Order`   | `userId + items.productId + status` | Review eligibility checks            |
+| `Review`  | `productId + userId` (unique)       | One review per user per product      |
+| `Review`  | `productId + createdAt`             | Fetch reviews sorted by newest       |
+
+> `Cart`, `Wishlist`, and `User.email` indexes are created automatically by MongoDB via `unique: true` in the schema.
 
 ---
 
