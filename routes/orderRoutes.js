@@ -2,25 +2,25 @@ import express from "express";
 import Order from "../models/Order.js";
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
-import { protect } from "../middleware/auth.js";
+import { protect, admin } from "../middleware/auth.js";
 
 const router = express.Router();
 
 // @route   POST /api/orders
-// @desc    Create a new order from cart
+// @desc    Create a new order from the user's current cart, then clear the cart
 // @access  Private
 router.post("/", protect, async (req, res) => {
   try {
     const { paymentMethod, shippingAddress } = req.body;
 
-    // Get user's cart
+    // Fetch user's cart and ensure it has items
     const cart = await Cart.findOne({ userId: req.user._id });
-
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({ error: "Cart is empty" });
     }
 
-    // Check if all products are still in stock and get current prices
+    // Validate every cart item against the current Product collection
+    // and lock in the current price at time of order
     const orderItems = [];
     for (const item of cart.items) {
       const product = await Product.findById(item.productId);
@@ -40,19 +40,19 @@ router.post("/", protect, async (req, res) => {
       orderItems.push({
         productId: product._id,
         quantity: item.quantity,
-        price: product.price, // Use current price
+        price: product.price, // use live price, not cached cart price
         name: product.name,
         imageUrl: product.imageUrl,
       });
     }
 
-    // Calculate total amount
+    // Calculate total from validated order items
     const totalAmount = orderItems.reduce(
       (sum, item) => sum + item.price * item.quantity,
       0,
     );
 
-    // Create order
+    // Create the order document
     const order = await Order.create({
       userId: req.user._id,
       items: orderItems,
@@ -62,7 +62,7 @@ router.post("/", protect, async (req, res) => {
       status: "pending",
     });
 
-    // Clear user's cart after successful order
+    // Clear the cart after a successful order placement
     cart.items = [];
     cart.totalPrice = 0;
     await cart.save();
@@ -75,14 +75,13 @@ router.post("/", protect, async (req, res) => {
 });
 
 // @route   GET /api/orders
-// @desc    Get user's order history
+// @desc    Get the logged-in user's full order history (newest first)
 // @access  Private
 router.get("/", protect, async (req, res) => {
   try {
     const orders = await Order.find({ userId: req.user._id }).sort({
       createdAt: -1,
-    }); // newest first
-
+    });
     res.json(orders);
   } catch (error) {
     console.error("Get orders error:", error.message);
@@ -91,10 +90,11 @@ router.get("/", protect, async (req, res) => {
 });
 
 // @route   GET /api/orders/:id
-// @desc    Get single order details
+// @desc    Get a single order by ID (must belong to the logged-in user)
 // @access  Private
 router.get("/:id", protect, async (req, res) => {
   try {
+    // Scope query to current user to prevent accessing other users' orders
     const order = await Order.findOne({
       _id: req.params.id,
       userId: req.user._id,
@@ -112,7 +112,7 @@ router.get("/:id", protect, async (req, res) => {
 });
 
 // @route   PUT /api/orders/:id/cancel
-// @desc    Cancel an order (only if pending)
+// @desc    Cancel an order — only allowed while status is "pending"
 // @access  Private
 router.put("/:id/cancel", protect, async (req, res) => {
   try {
@@ -125,6 +125,7 @@ router.put("/:id/cancel", protect, async (req, res) => {
       return res.status(404).json({ error: "Order not found" });
     }
 
+    // Prevent cancellation once the order has started processing
     if (order.status !== "pending") {
       return res.status(400).json({
         error: "Only pending orders can be cancelled",
@@ -141,16 +142,13 @@ router.put("/:id/cancel", protect, async (req, res) => {
   }
 });
 
-// Admin only: Get all orders (for admin dashboard)
 // @route   GET /api/orders/admin/all
-// @desc    Get all orders (admin only)
+// @desc    Get all orders across all users (admin dashboard)
 // @access  Private/Admin
-import { admin } from "../middleware/auth.js";
-
 router.get("/admin/all", protect, admin, async (req, res) => {
   try {
     const orders = await Order.find()
-      .populate("userId", "firstName lastName email")
+      .populate("userId", "firstName lastName email") // join user info for display
       .sort({ createdAt: -1 });
 
     res.json(orders);
@@ -160,7 +158,9 @@ router.get("/admin/all", protect, admin, async (req, res) => {
   }
 });
 
-// Admin only: Update order status
+// @route   PUT /api/orders/admin/:id/status
+// @desc    Update any order's status (admin only)
+// @access  Private/Admin
 router.put("/admin/:id/status", protect, admin, async (req, res) => {
   try {
     const { status } = req.body;
@@ -177,7 +177,6 @@ router.put("/admin/:id/status", protect, admin, async (req, res) => {
     }
 
     const order = await Order.findById(req.params.id);
-
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
     }

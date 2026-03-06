@@ -1,5 +1,11 @@
 import mongoose from "mongoose";
 
+/**
+ * Review Schema
+ * Represents a product review left by a verified purchaser.
+ * Users can only review products they have purchased and delivered/shipped.
+ * One review per user per product is enforced by a unique compound index.
+ */
 const reviewSchema = new mongoose.Schema(
   {
     productId: {
@@ -24,6 +30,7 @@ const reviewSchema = new mongoose.Schema(
       trim: true,
       maxlength: 500,
     },
+    // Stored directly to avoid extra User lookup when displaying reviews
     userName: {
       type: String,
       required: true,
@@ -34,8 +41,12 @@ const reviewSchema = new mongoose.Schema(
   },
 );
 
-// Ensure one review per user per product
+// Unique compound index: one review per user per product
+// Also speeds up lookups when checking if a user has already reviewed a product
 reviewSchema.index({ productId: 1, userId: 1 }, { unique: true });
+
+// Index for fetching all reviews for a product (product detail page)
+reviewSchema.index({ productId: 1, createdAt: -1 });
 
 const Review = mongoose.model("Review", reviewSchema);
 export default Review;

@@ -1,5 +1,10 @@
 import mongoose from "mongoose";
 
+/**
+ * Product Schema
+ * Represents a product listing in the store.
+ * inStock flag controls whether the item can be added to cart or ordered.
+ */
 const productSchema = new mongoose.Schema(
   {
     name: {
@@ -31,9 +36,18 @@ const productSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: true,
+    timestamps: true, // adds createdAt and updatedAt
   },
 );
+
+// Index for filtering products by category (used on product listing page)
+productSchema.index({ category: 1 });
+
+// Index for sorting/filtering products by price
+productSchema.index({ price: 1 });
+
+// Index for filtering in-stock products (common query when adding to cart)
+productSchema.index({ inStock: 1 });
 
 const Product = mongoose.model("Product", productSchema);
 export default Product;

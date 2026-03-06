@@ -7,17 +7,18 @@ import { protect } from "../middleware/auth.js";
 const router = express.Router();
 
 // @route   GET /api/reviews/product/:productId
-// @desc    Get all reviews for a product
+// @desc    Get all reviews for a product + average rating
 // @access  Public
 router.get("/product/:productId", async (req, res) => {
   try {
     const { productId } = req.params;
 
+    // Fetch latest 50 reviews, newest first
     const reviews = await Review.find({ productId })
       .sort({ createdAt: -1 })
       .limit(50);
 
-    // Calculate average rating
+    // Calculate average rating on the server to keep frontend simple
     const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
     const averageRating = reviews.length > 0 ? totalRating / reviews.length : 0;
 
@@ -33,20 +34,20 @@ router.get("/product/:productId", async (req, res) => {
 });
 
 // @route   GET /api/reviews/check-purchase/:productId
-// @desc    Check if user can review a product
+// @desc    Check if the logged-in user is eligible to review this product
 // @access  Private
 router.get("/check-purchase/:productId", protect, async (req, res) => {
   try {
     const { productId } = req.params;
 
-    // Check if user has purchased this product
+    // User must have a delivered or shipped order containing this product
     const hasPurchased = await Order.findOne({
       userId: req.user._id,
       "items.productId": productId,
       status: { $in: ["delivered", "shipped"] },
     });
 
-    // Check if user already reviewed
+    // User can only review once per product
     const existingReview = await Review.findOne({
       productId,
       userId: req.user._id,
@@ -64,19 +65,19 @@ router.get("/check-purchase/:productId", protect, async (req, res) => {
 });
 
 // @route   POST /api/reviews
-// @desc    Create a new review
+// @desc    Submit a new review for a purchased product
 // @access  Private
 router.post("/", protect, async (req, res) => {
   try {
     const { productId, rating, comment } = req.body;
 
-    // Check if product exists
+    // Confirm the product exists
     const product = await Product.findById(productId);
     if (!product) {
       return res.status(404).json({ error: "Product not found" });
     }
 
-    // Check if user has purchased this product
+    // Only verified buyers can leave reviews
     const hasPurchased = await Order.findOne({
       userId: req.user._id,
       "items.productId": productId,
@@ -89,7 +90,7 @@ router.post("/", protect, async (req, res) => {
       });
     }
 
-    // Check if user already reviewed this product
+    // Prevent duplicate reviews (also enforced by unique index in Review model)
     const existingReview = await Review.findOne({
       productId,
       userId: req.user._id,
@@ -101,7 +102,7 @@ router.post("/", protect, async (req, res) => {
       });
     }
 
-    // Create review
+    // Store user's full name directly so it shows correctly even if they rename later
     const review = await Review.create({
       productId,
       userId: req.user._id,
@@ -118,7 +119,7 @@ router.post("/", protect, async (req, res) => {
 });
 
 // @route   PUT /api/reviews/:reviewId
-// @desc    Update a review
+// @desc    Edit your own review
 // @access  Private
 router.put("/:reviewId", protect, async (req, res) => {
   try {
@@ -126,21 +127,20 @@ router.put("/:reviewId", protect, async (req, res) => {
     const { rating, comment } = req.body;
 
     const review = await Review.findById(reviewId);
-
     if (!review) {
       return res.status(404).json({ error: "Review not found" });
     }
 
-    // Check if user owns this review
+    // Only the original author can edit their review
     if (review.userId.toString() !== req.user._id.toString()) {
       return res.status(403).json({ error: "Not authorized" });
     }
 
+    // Only update fields that were provided in the request
     review.rating = rating || review.rating;
     review.comment = comment || review.comment;
 
     await review.save();
-
     res.json(review);
   } catch (error) {
     console.error("Update review error:", error.message);
@@ -149,19 +149,18 @@ router.put("/:reviewId", protect, async (req, res) => {
 });
 
 // @route   DELETE /api/reviews/:reviewId
-// @desc    Delete a review
+// @desc    Delete a review (owner or admin)
 // @access  Private
 router.delete("/:reviewId", protect, async (req, res) => {
   try {
     const { reviewId } = req.params;
 
     const review = await Review.findById(reviewId);
-
     if (!review) {
       return res.status(404).json({ error: "Review not found" });
     }
 
-    // Check if user owns this review or is admin
+    // Allow deletion by the review author OR an admin (for moderation)
     if (
       review.userId.toString() !== req.user._id.toString() &&
       req.user.role !== "admin"
@@ -170,7 +169,6 @@ router.delete("/:reviewId", protect, async (req, res) => {
     }
 
     await review.deleteOne();
-
     res.json({ message: "Review deleted successfully" });
   } catch (error) {
     console.error("Delete review error:", error.message);

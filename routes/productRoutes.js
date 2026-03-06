@@ -5,17 +5,21 @@ import { protect, admin } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// Get all products - PUBLIC
+// @route   GET /api/products
+// @desc    Get all products
+// @access  Public
 router.get("/", async (req, res, next) => {
   try {
     const products = await Product.find();
     res.json(products);
   } catch (error) {
-    next(error);
+    next(error); // passes to globalErr middleware
   }
 });
 
-// Get single product by ID - PUBLIC
+// @route   GET /api/products/:id
+// @desc    Get a single product by ID
+// @access  Public
 router.get("/:id", async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -28,9 +32,12 @@ router.get("/:id", async (req, res, next) => {
   }
 });
 
-// Seed products from Fake Store API
+// @route   POST /api/products/seed
+// @desc    Seed the database with products from Fake Store API (runs once)
+// @access  Public (can be secured with admin middleware if needed)
 router.post("/seed", async (req, res, next) => {
   try {
+    // Only seed if the collection is empty — prevents duplicate data
     const existingProducts = await Product.countDocuments();
     if (existingProducts > 0) {
       return res.json({
@@ -39,6 +46,7 @@ router.post("/seed", async (req, res, next) => {
       });
     }
 
+    // Fetch from Fake Store API and map to our schema shape
     const response = await axios.get("https://fakestoreapi.com/products");
     const products = response.data;
 
@@ -51,6 +59,7 @@ router.post("/seed", async (req, res, next) => {
       inStock: true,
     }));
 
+    // Bulk insert is more efficient than inserting one by one
     const inserted = await Product.insertMany(formattedProducts);
     res.json({
       message: "Products seeded successfully!",
@@ -61,7 +70,9 @@ router.post("/seed", async (req, res, next) => {
   }
 });
 
-// Create new product - ADMIN ONLY
+// @route   POST /api/products
+// @desc    Create a new product
+// @access  Private/Admin
 router.post("/", protect, admin, async (req, res, next) => {
   try {
     const product = new Product(req.body);
@@ -72,12 +83,14 @@ router.post("/", protect, admin, async (req, res, next) => {
   }
 });
 
-// Update product - ADMIN ONLY
+// @route   PUT /api/products/:id
+// @desc    Update an existing product
+// @access  Private/Admin
 router.put("/:id", protect, admin, async (req, res, next) => {
   try {
     const product = await Product.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
+      new: true, // return updated document
+      runValidators: true, // enforce schema validation on update
     });
     if (!product) {
       return res.status(404).json({ error: "Product not found" });
@@ -88,7 +101,9 @@ router.put("/:id", protect, admin, async (req, res, next) => {
   }
 });
 
-// Delete product - ADMIN ONLY
+// @route   DELETE /api/products/:id
+// @desc    Delete a product
+// @access  Private/Admin
 router.delete("/:id", protect, admin, async (req, res, next) => {
   try {
     const product = await Product.findByIdAndDelete(req.params.id);

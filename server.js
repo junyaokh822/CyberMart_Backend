@@ -10,12 +10,21 @@ import wishlistRoutes from "./routes/wishlistRoutes.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
 import cors from "cors";
 
+// Load environment variables from .env file
 dotenv.config();
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Connect to MongoDB
 connectDB();
 
-// CORS configuration - allow frontend to access
+/**
+ * CORS Configuration
+ * Allows requests from the frontend origin (set via FRONTEND_URL env var).
+ * Supports credentials (cookies/auth headers) and common HTTP methods.
+ * Falls back to localhost:5173 for local development.
+ */
 app.use(
   cors({
     origin: process.env.FRONTEND_URL || "http://localhost:5173",
@@ -25,11 +34,13 @@ app.use(
   }),
 );
 
-//express setup
+// Parse incoming JSON request bodies
 app.use(express.json());
+
+// Log every incoming request (method, URL, date)
 app.use(logReq);
 
-//routes
+// API Routes
 app.use("/api/products", productRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/cart", cartRoutes);
@@ -37,10 +48,10 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/reviews", reviewRoutes);
 
-//global handling errors
+// Global error handler — must be registered AFTER all routes
 app.use(globalErr);
 
-//listener
+// Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on: http://localhost:${PORT}`);
 });
