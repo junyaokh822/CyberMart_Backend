@@ -11,7 +11,7 @@ const router = express.Router();
 // @access  Private
 router.post("/", protect, async (req, res) => {
   try {
-    const { paymentMethod, shippingAddress } = req.body;
+    const { paymentMethod, shippingAddress, paymentDetails } = req.body;
 
     // Fetch user's cart and ensure it has items
     const cart = await Cart.findOne({ userId: req.user._id }).lean();
@@ -41,7 +41,7 @@ router.post("/", protect, async (req, res) => {
       orderItems.push({
         productId: product._id,
         quantity: item.quantity,
-        price: product.price, // use live price, not cached cart price
+        price: product.price,
         name: product.name,
         imageUrl: product.imageUrl,
       });
@@ -53,12 +53,46 @@ router.post("/", protect, async (req, res) => {
       0,
     );
 
-    // Create the order document
+    // Process payment details based on payment method
+    // Only store non-sensitive information for order reference
+    let processedPaymentDetails = {
+      paymentStatus: "pending",
+      paidAt: new Date(),
+    };
+
+    if (paymentDetails) {
+      // For card payments, only store last 4 digits
+      if (paymentMethod === "credit_card" || paymentMethod === "debit_card") {
+        processedPaymentDetails = {
+          ...processedPaymentDetails,
+          cardLastFour: paymentDetails.cardLastFour,
+          transactionId: paymentDetails.transactionId || `TXN_${Date.now()}`,
+        };
+      }
+      // For PayPal, store payer email
+      else if (paymentMethod === "paypal") {
+        processedPaymentDetails = {
+          ...processedPaymentDetails,
+          payerEmail: paymentDetails.payerEmail,
+          transactionId: paymentDetails.transactionId,
+        };
+      }
+      // For cash on delivery, payment will be completed on delivery
+      else if (paymentMethod === "cash_on_delivery") {
+        processedPaymentDetails = {
+          ...processedPaymentDetails,
+          paymentStatus: "pending", // Will be marked completed when order is delivered
+        };
+      }
+    }
+
+    // Create the order document with payment details
     const order = await Order.create({
       userId: req.user._id,
       items: orderItems,
       totalAmount,
       paymentMethod,
+      paymentDetails: processedPaymentDetails,
       shippingAddress,
       status: "pending",
     });
@@ -138,6 +172,13 @@ router.put("/:id/cancel", protect, async (req, res) => {
     }
 
     order.status = "cancelled";
+    // Update payment status if payment was already made
+    if (
+      order.paymentDetails &&
+      order.paymentDetails.paymentStatus === "completed"
+    ) {
+      order.paymentDetails.paymentStatus = "refunded";
+    }
     await order.save();
 
     res.json({ message: "Order cancelled successfully", order });
@@ -189,6 +230,17 @@ router.put("/admin/:id/status", protect, admin, async (req, res) => {
     }
 
     order.status = status;
+
+    // If order is delivered and payment method is cash_on_delivery,
+    // mark payment as completed
+    if (
+      status === "delivered" &&
+      order.paymentMethod === "cash_on_delivery" &&
+      order.paymentDetails
+    ) {
+      order.paymentDetails.paymentStatus = "completed";
+    }
+
     await order.save();
 
     res.json(order);
