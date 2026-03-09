@@ -128,6 +128,7 @@ Indexes are defined directly in each Mongoose schema to optimize common queries.
 | `User`    | `role`                              | Filter users by role (admin queries) |
 | `Product` | `category`, `price`, `inStock`      | Product listing and filtering        |
 | `Order`   | `userId`, `status`                  | Order history and status filtering   |
+| `Order`   | `paymentDetails.paymentStatus`      | Filter orders by payment status      |
 | `Order`   | `userId + items.productId + status` | Review eligibility checks            |
 | `Review`  | `productId + userId` (unique)       | One review per user per product      |
 | `Review`  | `productId + createdAt`             | Fetch reviews sorted by newest       |
